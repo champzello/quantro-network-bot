@@ -9,7 +9,9 @@ from telegram.ext import (
 )
 import random
 
-TOKEN = "TELEGRAM_BOT_TOKEN"
+import os
+
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Registration states
 NAME, EMAIL, PHONE, COUNTRY, WALLET = range(5)
