@@ -9,7 +9,7 @@ from telegram.ext import (
 )
 import random
 
-TOKEN = "8921463735:AAFlk4YwBYpuCAZ3jpYCwyYmHdu-nyIeXWU"
+TOKEN = "TELEGRAM_BOT_TOKEN"
 
 # Registration states
 NAME, EMAIL, PHONE, COUNTRY, WALLET = range(5)
