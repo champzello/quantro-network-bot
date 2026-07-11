@@ -13,10 +13,6 @@ import os
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-print("TOKEN FOUND:", TOKEN is not None)
-
-print("TOKEN LENGTH:", len(TOKEN) if TOKEN else 0)
-
 # Registration states
 NAME, EMAIL, PHONE, COUNTRY, WALLET = range(5)
 
@@ -349,11 +345,6 @@ request = HTTPXRequest(
     write_timeout=30,
     pool_timeout=30,
 )
-
-print(TOKEN)
-
-print(type(TOKEN)
-     )
 
 app = Application.builder().token(TOKEN).request(request).build()
 
