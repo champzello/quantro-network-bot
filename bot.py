@@ -11,7 +11,7 @@ import random
 
 import os
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Registration states
 NAME, EMAIL, PHONE, COUNTRY, WALLET = range(5)
