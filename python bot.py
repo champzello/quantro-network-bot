@@ -7,15 +7,26 @@ from telegram.ext import (
     ConversationHandler,
     filters,
 )
+import csv
+import os
 import random
+import sqlite3
 
-TOKEN = "TELEGRAM_BOT_TOKEN"
+TOKEN = "8921463735:AAES9xFF_R10uWebsZLN2_yM7donn31XYbI"
+
+ADMIN_ID = 8160417866
+
+# Stores support ticket message IDs and user IDs
+support_tickets = {}
 
 # Registration states
-NAME, EMAIL, PHONE, COUNTRY, WALLET = range(5)
+NAME, EMAIL, PHONE, COUNTRY, WALLET, CHECK_CASE = range(6)
 
 # Refund states
 RF_NAME, RF_EMAIL, RF_PHONE, RF_COUNTRY, RF_WALLET, RF_AMOUNT, RF_COIN, RF_DATE, RF_HASH, RF_PROOF, RF_DESCRIPTION = range(100, 111)
+
+# Support state
+SUPPORT = 200
 
 menu = [
     ["💬 Chat with Support"],
@@ -26,7 +37,46 @@ menu = [
 ]
 
 reply_markup = ReplyKeyboardMarkup(menu, resize_keyboard=True)
+async def update_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+        return
 
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "Usage:\n/update CASE_ID STATUS\n\nExample:\n/update QNP-123456 Approved"
+        )
+        return
+
+    case_id = context.args[0]
+    new_status = " ".join(context.args[1:])
+
+    rows = []
+
+    with open("refund_requests.csv", "r", encoding="utf-8") as file:
+        reader = csv.reader(file)
+        rows = list(reader)
+
+    updated = False
+
+    for row in rows[1:]:
+        if row[0] == case_id:
+            row[1] = new_status
+            updated = True
+            break
+
+    if not updated:
+        await update.message.reply_text("❌ Case ID not found.")
+        return
+
+    with open("refund_requests.csv", "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerows(rows)
+
+    await update.message.reply_text(
+        f"✅ {case_id} has been updated to: {new_status}"
+    )
+    
 # ==========================
 # START
 # ==========================
@@ -44,12 +94,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
-    if text == "💬 Chat with Support":
-        await update.message.reply_text(
-            "A support representative will be available soon."
-        )
-
-    elif text == "📊 Check Status":
+    if text == "📊 Check Status":
         await update.message.reply_text(
             "Please enter your Case ID."
         )
@@ -58,6 +103,64 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "Use the menu buttons to navigate through the portal."
         )
+        
+# ==========================
+# SUPPORT TICKET SYSTEM
+# ==========================
+
+async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "💬 Please describe your issue in one message."
+    )
+    return SUPPORT
+
+
+async def support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+
+    msg = await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=(
+            f"🎫 NEW SUPPORT TICKET\n\n"
+            f"👤 Name: {user.full_name}\n"
+            f"🆔 User ID: {user.id}\n"
+            f"📛 Username: @{user.username if user.username else 'None'}\n\n"
+            f"💬 Message:\n{update.message.text}"
+        )
+        )
+    
+    support_tickets[msg.message_id] = user.id
+
+    await update.message.reply_text(
+        "✅ Your message has been sent successfully.\n\n"
+        "A support representative will reply shortly.",
+        reply_markup=reply_markup,
+    )
+
+    return ConversationHandler.END
+
+
+async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    if not update.message.reply_to_message:
+        return
+
+    msg_id = update.message.reply_to_message.message_id
+
+    if msg_id not in support_tickets:
+        return
+
+    user_id = support_tickets[msg_id]
+
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=f"💬 Support Reply\n\n{update.message.text}"
+    )
+
+    await update.message.reply_text("✅ Reply delivered.")
 
 # ==========================
 # REGISTRATION
@@ -97,6 +200,11 @@ async def get_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📱 {context.user_data['phone']}\n"
         f"🌍 {context.user_data['country']}\n"
         f"👛 {context.user_data['wallet']}",
+        reply_markup=reply_markup,
+    )
+
+    await update.message.reply_text(
+        "You can now use the menu below.",
         reply_markup=reply_markup,
     )
 
@@ -223,21 +331,57 @@ async def refund_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================
 # FINISH REFUND REQUEST
 # ==========================
-
 async def refund_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     context.user_data["description"] = update.message.text
 
-    case_id = f"QNP-{random.randint(100000,999999)}"
-
+    case_id = f"QNP-{random.randint(100000, 999999)}"
     hashes = "\n".join(context.user_data["tx_hashes"])
 
+    csv_file = "refund_requests.csv"
+    file_exists = os.path.isfile(csv_file)
+
+    with open(csv_file, "a", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+
+        if not file_exists:
+            writer.writerow([
+                "Case ID",
+                "Status",
+                "Name",
+                "Email",
+                "Phone",
+                "Country",
+                "Wallet",
+                "Amount",
+                "Coin",
+                "Transaction Date",
+                "Transaction Hashes",
+                "Description"
+            ])
+
+        writer.writerow([
+            case_id,
+            "Pending",
+            context.user_data["rf_name"],
+            context.user_data["rf_email"],
+            context.user_data["rf_phone"],
+            context.user_data["rf_country"],
+            context.user_data["rf_wallet"],
+            context.user_data["rf_amount"],
+            context.user_data["rf_coin"],
+            context.user_data["rf_date"],
+            hashes,
+            context.user_data["description"],
+        ])
+
     await update.message.reply_text(
-        f"""
-✅ Refund Request Submitted Successfully
+        f"""✅ Refund Request Submitted Successfully
 
 📄 Case ID:
 {case_id}
+
+📌 Status:
+Pending
 
 👤 Name:
 {context.user_data['rf_name']}
@@ -269,8 +413,6 @@ async def refund_description(update: Update, context: ContextTypes.DEFAULT_TYPE)
 📝 Description:
 {context.user_data['description']}
 
-Your refund request has been received successfully.
-
 Please save your Case ID.
 
 Use 📊 Check Status anytime to track your request.
@@ -279,9 +421,39 @@ Use 📊 Check Status anytime to track your request.
     )
 
     context.user_data.clear()
-
     return ConversationHandler.END
 
+
+async def check_status_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📄 Please enter your Case ID:")
+    return CHECK_CASE
+
+
+async def check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    case_id = update.message.text.strip()
+
+    try:
+        with open("refund_requests.csv", "r", encoding="utf-8") as file:
+            reader = csv.reader(file)
+
+            next(reader)
+
+            for row in reader:
+                if row[0] == case_id:
+                    await update.message.reply_text(
+                        f"📄 Case ID: {row[0]}\n"
+                        f"📌 Status: {row[1]}"
+                    )
+                    return ConversationHandler.END
+
+        await update.message.reply_text("❌ Case ID not found.")
+
+    except FileNotFoundError:
+        await update.message.reply_text(
+            "No refund requests have been submitted yet."
+        )
+
+    return ConversationHandler.END
 # ==========================
 # REGISTRATION HANDLER
 # ==========================
@@ -331,6 +503,36 @@ refund_handler = ConversationHandler(
     fallbacks=[],
 )
 
+check_status_handler = ConversationHandler(
+    entry_points=[
+        MessageHandler(filters.Regex("^📊 Check Status$"), check_status_start)
+    ],
+    states={
+        CHECK_CASE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, check_status)
+        ],
+    },
+    fallbacks=[],
+)
+
+support_handler = ConversationHandler(
+    entry_points=[
+        MessageHandler(
+            filters.Regex("^💬 Chat with Support$"),
+            support_start,
+        )
+    ],
+    states={
+        SUPPORT: [
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND,
+                support_message,
+            )
+        ],
+    },
+    fallbacks=[],
+)
+
 # ==========================
 # START APPLICATION
 # ==========================
@@ -346,16 +548,23 @@ request = HTTPXRequest(
 
 app = Application.builder().token(TOKEN).request(request).build()
 
-app.add_handler(CommandHandler("start", start))
-
 app.add_handler(registration_handler)
-
 app.add_handler(refund_handler)
+app.add_handler(check_status_handler)
+app.add_handler(support_handler)
+
+app.add_handler(
+    MessageHandler(filters.REPLY & filters.TEXT, admin_reply)
+)
 
 app.add_handler(
     MessageHandler(filters.TEXT & ~filters.COMMAND, buttons)
 )
 
+app.add_handler(CommandHandler("update", update_status))
+app.add_handler(CommandHandler("start", start))
+
 print("✅ Bot is running...")
 
 app.run_polling()
+# Update for PostgreSQL
