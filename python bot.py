@@ -12,7 +12,7 @@ import os
 import random
 import sqlite3
 
-TOKEN = "8921463735:AAES9xFF_R10uWebsZLN2_yM7donn31XYbI"
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 ADMIN_ID = 8160417866
 
