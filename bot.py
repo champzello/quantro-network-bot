@@ -363,40 +363,40 @@ async def refund_description(update: Update, context: ContextTypes.DEFAULT_TYPE)
     file_exists = os.path.isfile(csv_file)
 
     with open(csv_file, "a", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
+    writer = csv.writer(file)
 
-        if not file_exists:
+    if not file_exists:
+        writer.writerow([
+            "Case ID",
+            "Status",
+            "Name",
+            "Email",
+            "Phone",
+            "Country",
+            "Wallet",
+            "Amount",
+            "Coin",
+            "Transaction Date",
+            "Transaction Hashes",
+            "Proof File ID",
+            "Description"
+        ])
+
     writer.writerow([
-        "Case ID",
-        "Status",
-        "Name",
-        "Email",
-        "Phone",
-        "Country",
-        "Wallet",
-        "Amount",
-        "Coin",
-        "Transaction Date",
-        "Transaction Hashes",
-        "Proof File ID",
-        "Description"
+        case_id,
+        "Pending",
+        context.user_data["rf_name"],
+        context.user_data["rf_email"],
+        context.user_data["rf_phone"],
+        context.user_data["rf_country"],
+        context.user_data["rf_wallet"],
+        context.user_data["rf_amount"],
+        context.user_data["rf_coin"],
+        context.user_data["rf_date"],
+        hashes,
+        context.user_data["proof"],
+        context.user_data["description"],
     ])
-
-writer.writerow([
-    case_id,
-    "Pending",
-    context.user_data["rf_name"],
-    context.user_data["rf_email"],
-    context.user_data["rf_phone"],
-    context.user_data["rf_country"],
-    context.user_data["rf_wallet"],
-    context.user_data["rf_amount"],
-    context.user_data["rf_coin"],
-    context.user_data["rf_date"],
-    hashes,
-    context.user_data["proof"],
-    context.user_data["description"],
-])
 
         await context.bot.send_photo(
         chat_id=ADMIN_ID,
@@ -419,8 +419,18 @@ writer.writerow([
     )
 
     await update.message.reply_text(
-        ...
-    )
+    f"""✅ Refund Request Submitted Successfully
+
+📄 Case ID: {case_id}
+
+📌 Status: Pending
+
+Please save your Case ID.
+
+Use 📊 Check Status anytime to track your request.
+""",
+    reply_markup=reply_markup,
+)
 
     context.user_data.clear()
     return ConversationHandler.END
