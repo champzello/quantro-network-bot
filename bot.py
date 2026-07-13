@@ -11,7 +11,7 @@ import csv
 import os
 import random
 
-TOKEN = "8921463735:AAE3GPqQux2cl-Bcv4YsTAjmJi35Mp7qIqw"
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 ADMIN_ID = 8160417866
 
