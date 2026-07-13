@@ -14,7 +14,7 @@ import threading
 
 from flask import Flask
 
-TOKEN = "7864833225:AAFqQnSGjnW_wq7ZDmHYzJU9iKrepg9fgHo"
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 ADMIN_ID = 8160417866
 
