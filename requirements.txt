@@ -3,3 +3,4 @@ python-dotenv
 requests
 web3
 psycopg2-binary
+flask
