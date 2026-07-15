@@ -1,4 +1,9 @@
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -7,34 +12,66 @@ from telegram.ext import (
     ConversationHandler,
     filters,
 )
+
 import csv
 import os
 import random
 import threading
 
 from flask import Flask
+from telegram import ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import ConversationHandler
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TOKEN = "7864833225:AAGVbq2V511-hsNFkv6tcNlYw6biOE5xn44"
 
 ADMIN_ID = 8160417866
+
+# ==========================
+# FILES
+# ==========================
+
+REGISTERED_USERS_FILE = "registered_users.csv"
+REFUNDS_FILE = "refund_requests.csv"
+SUPPORT_FILE = "support_tickets.csv"
+KYC_FILE = "kyc.csv"
+
+if not os.path.exists(KYC_FILE):
+    with open(KYC_FILE, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "user_id",
+            "full_name",
+            "id_type",
+            "id_photo",
+            "selfie_photo",
+            "status",
+            "reason"
+        ])
 
 # Stores support ticket message IDs and user IDs
 support_tickets = {}
 
+
 # Registration states
-NAME, EMAIL, PHONE, COUNTRY, WALLET, CHECK_CASE = range(6)
+NAME, EMAIL, PHONE, COUNTRY, WALLET, KYC_NAME, KYC_IDTYPE, KYC_IDPHOTO, KYC_SELFIE = range(9)
 
 # Refund states
 RF_NAME, RF_EMAIL, RF_PHONE, RF_COUNTRY, RF_WALLET, RF_AMOUNT, RF_COIN, RF_DATE, RF_HASH, RF_PROOF, RF_DESCRIPTION = range(100, 111)
 
-# Support state
-SUPPORT = 200
+# Support & Check Status states
+SUPPORT, CHECK_CASE = range(200, 202)
+
+# ==========================
+# MAIN MENU
+# ==========================
 
 menu = [
+    ["🆕 New User Registration"],
     ["💼 Wallet"],
     ["📈 Investment Plans"],
     ["👥 Referrals"],
     ["🪪 KYC Status"],
+    ["📤 Submit KYC"],
     ["💰 Submit Refund Request"],
     ["📊 Check Status"],
     ["💬 Chat with Support"],
@@ -42,18 +79,18 @@ menu = [
     ["ℹ️ Help"],
 ]
 
-registration_menu = [
-    ["🆕 New User Registration"]
-]
-
-registration_markup = ReplyKeyboardMarkup(
-    registration_menu,
+reply_markup = ReplyKeyboardMarkup(
+    menu,
     resize_keyboard=True
 )
 
+# ==========================
+# CANCEL MENU
+# ==========================
+
 cancel_menu = [
     ["🏠 Main Menu"],
-    ["❌ Cancel"]
+    ["❌ Cancel"],
 ]
 
 cancel_markup = ReplyKeyboardMarkup(
@@ -61,7 +98,9 @@ cancel_markup = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-reply_markup = ReplyKeyboardMarkup(menu, resize_keyboard=True)
+# ==========================
+# WALLET MENU
+# ==========================
 
 wallet_menu = [
     ["💳 Quantro Network Wallet"],
@@ -71,7 +110,11 @@ wallet_menu = [
     ["📜 Transactions"],
     ["⬅️ Back to Main Menu"],
 ]
-wallet_markup = ReplyKeyboardMarkup(wallet_menu, resize_keyboard=True)
+
+wallet_markup = ReplyKeyboardMarkup(
+    wallet_menu,
+    resize_keyboard=True
+)
 
 async def update_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -89,7 +132,7 @@ async def update_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     rows = []
 
-    with open("refund_requests.csv", "r", encoding="utf-8") as file:
+    with open(REFUNDS_FILE, "r", encoding="utf-8") as file:
         reader = csv.reader(file)
         rows = list(reader)
 
@@ -287,6 +330,189 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # ==========================
+# KYC FUNCTIONS
+# ==========================
+
+async def submit_kyc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🪪 KYC Verification\n\n"
+        "Please enter your full name:",
+        reply_markup=cancel_markup,
+    )
+    return KYC_NAME
+
+
+async def kyc_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["kyc_name"] = update.message.text
+
+    await update.message.reply_text(
+        "Enter your ID type:\n\n"
+        "• National ID\n"
+        "• Passport\n"
+        "• Driver's License"
+    )
+    return KYC_IDTYPE
+
+
+async def kyc_idtype(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["kyc_idtype"] = update.message.text
+
+    await update.message.reply_text(
+        "📷 Please upload a clear photo of your ID document."
+    )
+    return KYC_IDPHOTO
+
+
+async def kyc_idphoto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.photo:
+        await update.message.reply_text(
+            "❌ Please send a photo of your ID document."
+        )
+        return KYC_IDPHOTO
+
+    context.user_data["id_photo"] = update.message.photo[-1].file_id
+
+    await update.message.reply_text(
+        "🤳 Now upload a selfie while holding your ID."
+    )
+    return KYC_SELFIE
+
+
+async def kyc_selfie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.photo:
+        await update.message.reply_text(
+            "❌ Please send your selfie photo."
+        )
+        return KYC_SELFIE
+
+    selfie_photo = update.message.photo[-1].file_id
+
+    # Save KYC to CSV
+    with open(KYC_FILE, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            str(update.effective_user.id),
+            context.user_data["kyc_name"],
+            context.user_data["kyc_idtype"],
+            context.user_data["id_photo"],
+            selfie_photo,
+            "Pending",
+            ""
+        ])
+
+    # ==========================
+    # SEND KYC TO ADMIN
+    # ==========================
+
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=(
+            "🆕 New KYC Submission\n\n"
+            f"👤 User ID: {update.effective_user.id}\n"
+            f"📝 Name: {context.user_data['kyc_name']}\n"
+            f"🪪 ID Type: {context.user_data['kyc_idtype']}"
+        )
+    )
+
+    await context.bot.send_photo(
+        chat_id=ADMIN_ID,
+        photo=context.user_data["id_photo"],
+        caption="🪪 ID Document"
+    )
+
+    await context.bot.send_photo(
+        chat_id=ADMIN_ID,
+        photo=selfie_photo,
+        caption="🤳 Selfie Photo"
+    )
+
+    # Clear temporary data
+    context.user_data.clear()
+
+    await update.message.reply_text(
+        "✅ Your KYC has been submitted successfully.\n\n"
+        "Status: 🟡 Pending Review",
+        reply_markup=reply_markup,
+    )
+
+    return ConversationHandler.END
+
+# ==========================
+# KYC HELPER FUNCTIONS
+# ==========================
+
+def get_kyc(user_id):
+    if not os.path.exists(KYC_FILE):
+        return None
+
+    with open(KYC_FILE, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row["user_id"] == str(user_id):
+                return row
+    return None
+
+
+def update_kyc_status(user_id, status, reason=""):
+    rows = []
+
+    with open(KYC_FILE, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    with open(KYC_FILE, "w", newline="", encoding="utf-8") as f:
+        fieldnames = [
+            "user_id",
+            "full_name",
+            "id_type",
+            "id_photo",
+            "selfie_photo",
+            "status",
+            "reason",
+        ]
+
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for row in rows:
+            if row["user_id"] == str(user_id):
+                row["status"] = status
+                row["reason"] = reason
+
+            writer.writerow(row)
+
+
+async def approvekyc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Unauthorized.")
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text(
+            "Usage:\n/approvekyc USER_ID"
+        )
+        return
+
+    user_id = context.args[0]
+
+    if get_kyc(user_id) is None:
+        await update.message.reply_text("❌ KYC record not found.")
+        return
+
+    update_kyc_status(user_id, "Approved")
+
+    await context.bot.send_message(
+        chat_id=int(user_id),
+        text=(
+            "🎉 Congratulations!\n\n"
+            "Your KYC has been approved.\n\n"
+            "Status: 🟢 Approved"
+        )
+    )
+
+    await update.message.reply_text("✅ KYC approved successfully.")
+
+# ==========================
 # MENU BUTTONS
 # ==========================
 
@@ -304,25 +530,86 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ):
         return
 
-    if text=="💼 Wallet":
-        await update.message.reply_text("💼 Wallet Menu", reply_markup=wallet_markup)
+    if text == "💳 Quantro Network Wallet":
+        balance = get_qwallet(update.effective_user.id)
+        await update.message.reply_text(
+            f"💳 *Quantro Network Wallet*\n\n"
+            f"Current Balance: ${balance:.2f}",
+            parse_mode="Markdown",
+        )
         return
-    if text=="⬅️ Back to Main Menu":
-        await update.message.reply_text("🏠 Main Menu", reply_markup=reply_markup)
+
+    if text == "🤝 Affiliate Earnings Wallet":
+        await update.message.reply_text(
+            f"🤝 Affiliate Earnings Wallet\n"
+            f"Balance: ${get_affiliate_wallet(update.effective_user.id):.2f}"
+        )
         return
-    if text in ("💳 Quantro Network Wallet","🤝 Affiliate Earnings Wallet","💵 Fund Wallet","💸 Withdraw","📜 Transactions","📈 Investment Plans","👥 Referrals","🪪 KYC Status"):
-        await update.message.reply_text(f"💳 Quantro Network Wallet\nBalance: ${get_qwallet(update.effective_user.id):.2f}")
+
+    if text == "💵 Fund Wallet":
+        await update.message.reply_text("💵 Funding feature coming soon.")
+        return
+
+    if text == "💸 Withdraw":
+        await update.message.reply_text("💸 Withdrawal feature coming soon.")
+        return
+
+    if text == "📜 Transactions":
+        await update.message.reply_text("📜 Transaction history feature coming soon.")
+        return
+    
+    if text == "🪪 KYC Status":
+        kyc = get_kyc(update.effective_user.id)
+
+        if kyc is None:
+            await update.message.reply_text(
+                "🪪 KYC Verification\n\n"
+                "Status: ❌ Not Submitted\n\n"
+                "Press 📤 Submit KYC to begin."
+            )
+        else:
+            status = kyc["status"]
+
+            if status == "Pending":
+                icon = "🟡"
+            elif status == "Approved":
+                icon = "🟢"
+            elif status == "Rejected":
+                icon = "🔴"
+            else:
+                icon = "❌"
+
+            message = (
+                f"🪪 KYC Verification\n\n"
+                f"Status: {icon} {status}"
+            )
+
+            if kyc["reason"]:
+                message += f"\n\nReason:\n{kyc['reason']}"
+
+            await update.message.reply_text(message)
+
         return
 
     if text == "📋 My Profile":
-        user_id=str(update.effective_user.id)
+        user_id = str(update.effective_user.id)
+
         if os.path.exists("registered_users.csv"):
-            with open("registered_users.csv","r",encoding="utf-8") as f:
-                r=csv.reader(f); next(r,None)
+            with open("registered_users.csv", "r", encoding="utf-8") as f:
+                r = csv.reader(f)
+                next(r, None)
+
                 for row in r:
-                    if row and row[0]==user_id:
-                        await update.message.reply_text(f"👤 Name: {row[1]}\n📧 Email: {row[2]}\n📱 Phone: {row[3]}\n🌍 Country: {row[4]}\n👛 Wallet: {row[5]}")
+                    if row and row[0] == user_id:
+                        await update.message.reply_text(
+                            f"👤 Name: {row[1]}\n"
+                            f"📧 Email: {row[2]}\n"
+                            f"📱 Phone: {row[3]}\n"
+                            f"🌍 Country: {row[4]}\n"
+                            f"👛 Wallet: {row[5]}"
+                        )
                         return
+                        
         await update.message.reply_text("❌ No profile found. Please register first.")
         return
 
@@ -764,7 +1051,7 @@ async def check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
-    with open("refund_requests.csv", "r", encoding="utf-8") as file:
+    with open(REFUNDS_FILE, "r", encoding="utf-8") as file:
         reader = csv.reader(file)
 
         next(reader, None)
@@ -883,9 +1170,63 @@ support_handler = ConversationHandler(
 ],
 )
 
+# ==========================
+# KYC HELPER FUNCTIONS
+# ==========================
+
+def get_kyc(user_id):
+    if not os.path.exists(KYC_FILE):
+        return None
+
+    with open(KYC_FILE, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+
+        for row in reader:
+            if row["user_id"] == str(user_id):
+                return row
+
+    return None
+
+
+def save_kyc(data):
+
+    rows = []
+
+    if os.path.exists(KYC_FILE):
+        with open(KYC_FILE, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+    updated = False
+
+    for row in rows:
+        if row["user_id"] == data["user_id"]:
+            row.update(data)
+            updated = True
+
+    if not updated:
+        rows.append(data)
+
+    with open(KYC_FILE, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "user_id",
+                "full_name",
+                "id_type",
+                "id_photo",
+                "selfie_photo",
+                "status",
+                "reason",
+            ],
+        )
+
+        writer.writeheader()
+        writer.writerows(rows)
+
 
 def get_qwallet(uid):
-    f="wallets.csv"
+    f = "wallets.csv"
     import csv,os
     if not os.path.exists(f):
         with open(f,"w",newline="",encoding="utf-8") as h:
@@ -939,17 +1280,62 @@ async def wallethistory(update,context):
                 lines.append(f"{row[1]} ${row[2]} -> ${row[3]}\n{row[4]}")
     await update.message.reply_text("\n\n".join(lines) if lines else "No transactions for this user.")
 
-async def addbalance(update,context):
-    if update.effective_user.id!=ADMIN_ID:return
-    uid,amt=context.args;bal=get_qwallet(uid)+float(amt);set_qwallet(uid,bal)
-    await context.bot.send_message(chat_id=int(uid),text=f"💳 Your Quantro Network Wallet has been credited.\nAmount Added: ${float(amt):.2f}\nNew Balance: ${bal:.2f}")
-    await update.message.reply_text(f"✅ Added ${float(amt):.2f} to {uid}. New balance: ${bal:.2f}")
-async def subbalance(update,context):
-    if update.effective_user.id!=ADMIN_ID:return
-    uid,amt=context.args;bal=max(0,get_qwallet(uid)-float(amt));set_qwallet(uid,bal)
-    await context.bot.send_message(chat_id=int(uid),text=f"💳 Your Quantro Network Wallet has been credited.\nAmount Added: ${float(amt):.2f}\nNew Balance: ${bal:.2f}")
-    await update.message.reply_text(f"✅ Added ${float(amt):.2f} to {uid}. New balance: ${bal:.2f}")
+async def addbalance(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        return
 
+    if len(context.args) != 2:
+        await update.message.reply_text(
+            "Usage:\n/addbalance USER_ID AMOUNT"
+        )
+        return
+
+    uid, amt = context.args
+    bal = get_qwallet(uid) + float(amt)
+    set_qwallet(uid, bal)
+    log_wallet_transaction(uid, "Credit", float(amt), bal)
+
+    await context.bot.send_message(
+        chat_id=int(uid),
+        text=(
+            f"💳 Your Quantro Network Wallet has been credited.\n"
+            f"Amount Added: ${float(amt):.2f}\n"
+            f"New Balance: ${bal:.2f}"
+        ),
+    )
+
+    await update.message.reply_text(
+        f"✅ Added ${float(amt):.2f} to {uid}. New balance: ${bal:.2f}"
+    )
+    
+async def subbalance(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    if len(context.args) != 2:
+        await update.message.reply_text(
+            "Usage:\n/subbalance USER_ID AMOUNT"
+        )
+        return
+
+    uid, amt = context.args
+
+    bal = max(0, get_qwallet(uid) - float(amt))
+    set_qwallet(uid, bal)
+    log_wallet_transaction(uid, "Debit", float(amt), bal)
+
+    await context.bot.send_message(
+        chat_id=int(uid),
+        text=(
+            f"💳 Your Quantro Network Wallet has been debited.\n"
+            f"Amount Removed: ${float(amt):.2f}\n"
+            f"New Balance: ${bal:.2f}"
+        )
+    )
+
+    await update.message.reply_text(
+        f"✅ Removed ${float(amt):.2f} from {uid}. New balance: ${bal:.2f}"
+    )
 
 
 def get_affiliate_wallet(uid):
@@ -1040,13 +1426,46 @@ request = HTTPXRequest(
     pool_timeout=30,
 )
 
-app = Application.builder().token(TOKEN).request(request).build()
+app = (
+    Application.builder()
+    .token(TOKEN)
+    .request(request)
+    .build()
+)
+
+kyc_handler = ConversationHandler(
+    entry_points=[
+        MessageHandler(
+            filters.Regex("^📤 Submit KYC$"),
+            submit_kyc,
+        )
+    ],
+    states={
+        KYC_NAME: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, kyc_name)
+        ],
+        KYC_IDTYPE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, kyc_idtype)
+        ],
+        KYC_IDPHOTO: [
+            MessageHandler(filters.PHOTO, kyc_idphoto)
+        ],
+        KYC_SELFIE: [
+            MessageHandler(filters.PHOTO, kyc_selfie)
+        ],
+    },
+    fallbacks=[
+        MessageHandler(filters.Regex("^❌ Cancel$"), cancel)
+    ],
+)
 
 app.add_handler(registration_handler)
+app.add_handler(kyc_handler)
 app.add_handler(refund_handler)
 app.add_handler(check_status_handler)
 app.add_handler(support_handler)
 
+app.add_handler(CommandHandler("approvekyc", approvekyc))
 app.add_handler(CommandHandler("update", update_status))
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("addbalance", addbalance))
