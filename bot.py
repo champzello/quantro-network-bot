@@ -87,6 +87,19 @@ reply_markup = ReplyKeyboardMarkup(
 )
 
 # ==========================
+# REGISTRATION MENU
+# ==========================
+
+registration_menu = [
+    ["🆕 New User Registration"],
+]
+
+registration_markup = ReplyKeyboardMarkup(
+    registration_menu,
+    resize_keyboard=True,
+)
+
+# ==========================
 # CANCEL MENU
 # ==========================
 
