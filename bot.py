@@ -22,7 +22,7 @@ from flask import Flask
 from telegram import ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ConversationHandler
 
-TOKEN = "7864833225:AAGVbq2V511-hsNFkv6tcNlYw6biOE5xn44"
+TOKEN = "TELEGRAM_BOT_TOKEN"
 
 ADMIN_ID = 8160417866
 
